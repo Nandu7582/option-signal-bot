@@ -1,27 +1,37 @@
 from fastapi import FastAPI
-from strategy import generate_signals
-from send_telegram import send_signal
-from option_data import get_banknifty_option_oi
+from fastapi.middleware.cors import CORSMiddleware
+import strategy
+import option_data
 import json
 
 app = FastAPI()
 
+# CORS config (allows frontend access)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/")
-def root():
-    return {"status": "Bot is running"}
+def home():
+    return {"message": "✅ Your trading bot is running."}
 
-@app.get("/api/signal")
-def signal():
-    signals = generate_signals()
-    for s in signals:
-        send_signal(s)
-    return signals
+@app.get("/signal")
+def get_signal():
+    signal_text = strategy.generate_signal()
+    return {"signal": signal_text}
 
-@app.get("/api/options")
-def option_data():
-    return get_banknifty_option_oi()
+@app.get("/options")
+def get_options():
+    return option_data.fetch_banknifty_options()
 
-@app.get("/api/history")
-def history():
-    with open("signal_history.json", "r") as f:
-        return json.load(f)
+@app.get("/history")
+def get_history():
+    try:
+        with open("signal_history.json", "r") as file:
+            data = json.load(file)
+        return data
+    except Exception as e:
+        return {"error": str(e)}
