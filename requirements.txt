@@ -1,0 +1,10 @@
+streamlit
+nsepython
+ta
+matplotlib
+requests
+pandas
+numpy
+python-telegram-bot
+yfinance
+prophet               
