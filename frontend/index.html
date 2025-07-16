@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Apna Trading Dashboard</title>
+</head>
+<body>
+  <h2>📈 Trading Bot Dashboard</h2>
+  <button onclick="fetchSignal()">Fetch Signal</button>
+  <button onclick="fetchHistory()">Show History</button>
+  <button onclick="fetchOptions()">BankNifty Options</button>
+  <pre id="output">Waiting...</pre>
+
+  <script>
+    async function fetchSignal() {
+      const res = await fetch('/api/signal');
+      const data = await res.json();
+      document.getElementById('output').innerText = JSON.stringify(data, null, 2);
+    }
+
+    async function fetchHistory() {
+      const res = await fetch('/api/history');
+      const data = await res.json();
+      document.getElementById('output').innerText = JSON.stringify(data.slice(-5), null, 2);
+    }
+
+    async function fetchOptions() {
+      const res = await fetch('/api/options');
+      const data = await res.json();
+      document.getElementById('output').innerText = JSON.stringify(data, null, 2);
+    }
+  </script>
+</body>
+</html>
