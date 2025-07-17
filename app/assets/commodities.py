@@ -1,4 +1,7 @@
 def fetch_gold_data():
-    url = "https://www.alphavantage.co/query?function=COMMODITY_EXCHANGE_RATE&from_symbol=XAU&to_symbol=INR&apikey=YOUR_API_KEY"
-    data = requests.get(url).json()
-    return float(data['Realtime Currency Exchange Rate']['5. Exchange Rate'])
+    try:
+        price = requests.get(...).json()['Realtime Currency Exchange Rate']['5. Exchange Rate']
+        return float(price), False
+    except:
+        with open("app/static/gold_fallback.json", "r") as f:
+            return json.load(f)['price'], True
