@@ -15,8 +15,7 @@ st.set_page_config(page_title="Option Signal Bot", layout="wide")
 st.title("📊 Option Signal Bot")
 st.markdown("Real-time multi-asset signals with fallback protection.")
 
-# 🔁 Auto-refresh every 5 minutes (Streamlit-compatible)
-st.query_params(refresh=str(time.time()))
+# 🔁 Auto-refresh every 5 minutes (HTML-based)
 st.markdown("<meta http-equiv='refresh' content='300'>", unsafe_allow_html=True)
 
 # 🧠 Strategy Selector
