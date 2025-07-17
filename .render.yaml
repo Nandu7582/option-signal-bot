@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: option-signal-bot
-    env: python
-    buildCommand: |
-      pip install -r requirements.txt
-      pip install smartapi-python
-    startCommand: streamlit run main.py
-    pythonVersion: 3.10.13
