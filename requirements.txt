@@ -4,11 +4,11 @@ pyotp
 websocket-client
 python-dotenv
 pandas
-numpy
 requests
+ta
 yfinance
 prophet
-ta
-matplotlib
 plotly
 scikit-learn
+keras
+tensorflow
