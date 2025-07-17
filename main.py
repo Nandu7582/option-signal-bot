@@ -1,46 +1,4 @@
 import streamlit as st
-from app.assets.nse_index import fetch_index_options
-from app.assets.nse_stocks import fetch_stock_data
-from app.assets.crypto import fetch_bitcoin_data
-from app.assets.commodities import fetch_gold_data
-from app.indicators import add_indicators
-from app.signal_engine import generate_signal
-from app.dashboard import show_dashboard
-from app.telegram_alerts import send_telegram_message
-from app.pl_plotter import plot_pl
-
-# 🔧 Streamlit Setup
-st.set_page_config(page_title="Option Signal Bot", layout="wide")
-st.title("📊 Option Signal Bot")
-st.markdown("Real-time multi-asset signals with fallback protection.")
-
-signals = []
-
-# 🏦 Bank Nifty
-try:
-    df_bn = fetch_index_options("BANKNIFTY")
-    if not df_bn.empty:
-        df_bn = add_indicators(df_bn)
-        signals += generate_signal("BANKNIFTY", df_bn, expiry="18JUL2024")
-    else:
-        st.warning("⚠️ Bank Nifty data unavailable. Skipping signal.")
-except Exception as e:
-    st.error(f"Bank Nifty fetch failed: {e}")
-
-# 🏦 Nifty
-try:
-    df_nf = fetch_index_options("NIFTY")
-    if not df_nf.empty:
-        df_nf = add_indicators(df_nf)
-        signals += generate_signal("NIFTY", df_nf, expiry="18JUL2024")
-    else:
-        st.warning("⚠️ Nifty data unavailable. Skipping signal.")
-except Exception as e:
-    st.error(f"Nifty fetch failed: {e}")
-
-# 📈 Nifty 500 Stocks
-for stock in ["RELIANCE", "TCS", "INFY"]:
-import streamlit as st
 import time
 from app.assets.nse_index import fetch_index_options
 from app.assets.nse_stocks import fetch_stock_data
@@ -59,10 +17,7 @@ st.markdown("Real-time multi-asset signals with fallback protection.")
 
 # 🔁 Auto-refresh every 5 minutes
 st.experimental_set_query_params(refresh=str(time.time()))
-st.markdown(
-    "<meta http-equiv='refresh' content='300'>",
-    unsafe_allow_html=True
-)
+st.markdown("<meta http-equiv='refresh' content='300'>", unsafe_allow_html=True)
 
 # 🧠 Strategy Selector
 st.sidebar.header("🧠 Strategy Selector")
