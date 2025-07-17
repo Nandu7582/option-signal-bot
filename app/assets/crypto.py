@@ -1,6 +1,7 @@
-import requests
-
 def fetch_bitcoin_data():
-    url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=inr"
-    data = requests.get(url).json()
-    return data['bitcoin']['inr']
+    try:
+        price = requests.get(...).json()['bitcoin']['inr']
+        return price, False
+    except:
+        with open("app/static/btc_fallback.json", "r") as f:
+            return json.load(f)['price'], True
