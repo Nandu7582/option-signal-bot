@@ -9,13 +9,14 @@ from app.signal_engine import generate_signal
 from app.dashboard import show_dashboard
 from app.telegram_alerts import send_telegram_message
 from app.pl_plotter import plot_pl
+from app.broker_api import fetch_ltp, place_order  # 🆕 Angel One integration
 
 # 🔧 Streamlit Setup
 st.set_page_config(page_title="Option Signal Bot", layout="wide")
 st.title("📊 Option Signal Bot")
 st.markdown("Real-time multi-asset signals with fallback protection.")
 
-# 🔁 Auto-refresh every 5 minutes (HTML-based)
+# 🔁 Auto-refresh every 5 minutes
 st.markdown("<meta http-equiv='refresh' content='300'>", unsafe_allow_html=True)
 
 # 🧠 Strategy Selector
@@ -26,7 +27,14 @@ st.sidebar.markdown(f"Selected Strategy: **{strategy}**")
 signals = []
 signal_health = {}
 
-# 🏦 Bank Nifty
+# 🏦 BANKNIFTY Live Price via Angel One
+try:
+    banknifty_price = fetch_ltp("BANKNIFTY", exchange="NSE", token="26009")
+    st.sidebar.metric("BANKNIFTY (Angel One)", banknifty_price)
+except Exception as e:
+    st.sidebar.error(f"Angel One LTP error: {e}")
+
+# 🏦 Bank Nifty Signal
 try:
     df_bn, fallback_bn, ts_bn = fetch_index_options("BANKNIFTY")
     signal_health["BANKNIFTY"] = f"{'Fallback' if fallback_bn else 'Live'} (Updated: {ts_bn})"
@@ -119,3 +127,8 @@ for signal in signals:
         st.error(f"Signal error for {signal['symbol']}: {e}")
 
 show_dashboard(signals)
+
+# 🧪 Test Order Button
+if st.sidebar.button("Place Test Order"):
+    result = place_order("BANKNIFTY", qty=1)
+    st.sidebar.write(result)
