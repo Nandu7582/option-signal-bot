@@ -1,23 +1,23 @@
-# app/broker_api.py
-
-from smartapi import SmartConnect
-import pyotp
+import os
 import time
+import pyotp
+import pandas as pd
+from dotenv import load_dotenv
+from smartapi import SmartConnect
 
-# 🔐 Replace with your credentials
-API_KEY = "LFIyC3E1"
-CLIENT_CODE = "N305936"
-PASSWORD = "Nandu7582@"
-TOTP_SECRET = "12a2f370-be86-4000-b5d7-59eca3e55214"
+load_dotenv()
 
-# ✅ Authenticate
+API_KEY = os.getenv("API_KEY")
+CLIENT_CODE = os.getenv("CLIENT_CODE")
+PASSWORD = os.getenv("PASSWORD")
+TOTP_SECRET = os.getenv("TOTP_SECRET")
+
 def get_connection():
     obj = SmartConnect(api_key=API_KEY)
     totp = pyotp.TOTP(TOTP_SECRET).now()
-    data = obj.generateSession(CLIENT_CODE, PASSWORD, totp)
+    obj.generateSession(CLIENT_CODE, PASSWORD, totp)
     return obj
 
-# 📈 Fetch live quote
 def fetch_ltp(symbol="BANKNIFTY", exchange="NSE", token="26009"):
     obj = get_connection()
     try:
@@ -27,7 +27,16 @@ def fetch_ltp(symbol="BANKNIFTY", exchange="NSE", token="26009"):
         print("LTP fetch failed:", e)
         return None
 
-# 📦 Place order
+def fetch_option_chain(symbol="BANKNIFTY"):
+    obj = get_connection()
+    try:
+        data = obj.getOptionChain(symbol=symbol)
+        df = pd.DataFrame(data['data'])
+        return df, False, time.strftime("%H:%M:%S")
+    except Exception as e:
+        print(f"Option chain fetch failed: {e}")
+        return pd.DataFrame(), True, time.strftime("%H:%M:%S")
+
 def place_order(symbol="BANKNIFTY", qty=1, price=None, order_type="MARKET", product_type="INTRADAY"):
     obj = get_connection()
     try:
