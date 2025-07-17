@@ -1,9 +1,7 @@
 import os
-import time
 import pyotp
-import pandas as pd
+from smartapi.smartConnect import SmartConnect
 from dotenv import load_dotenv
-from smartapi import SmartConnect
 
 load_dotenv()
 
@@ -12,49 +10,44 @@ CLIENT_CODE = os.getenv("CLIENT_CODE")
 PASSWORD = os.getenv("PASSWORD")
 TOTP_SECRET = os.getenv("TOTP_SECRET")
 
-def get_connection():
+def get_token():
+    totp = pyotp.TOTP(TOTP_SECRET)
+    otp = totp.now()
+
     obj = SmartConnect(api_key=API_KEY)
-    totp = pyotp.TOTP(TOTP_SECRET).now()
-    obj.generateSession(CLIENT_CODE, PASSWORD, totp)
+    data = obj.generateSession(CLIENT_CODE, PASSWORD, otp)
+    if data.get("status") != True:
+        raise Exception("Login failed:", data)
     return obj
 
-def fetch_ltp(symbol="BANKNIFTY", exchange="NSE", token="26009"):
-    obj = get_connection()
+def fetch_ltp(obj, symbol):
     try:
-        data = obj.ltpData(exchange=exchange, tradingsymbol=symbol, symboltoken=token)
-        return data['data']['ltp']
+        return obj.get_ltp_data(exchange="NSE", tradingsymbol=symbol, symboltoken="99926000")["data"]["ltp"]
     except Exception as e:
-        print("LTP fetch failed:", e)
+        print("LTP fetch error:", e)
         return None
 
-def fetch_option_chain(symbol="BANKNIFTY"):
-    obj = get_connection()
+def fetch_option_chain(obj, symbol, expiry):
     try:
-        data = obj.getOptionChain(symbol=symbol)
-        df = pd.DataFrame(data['data'])
-        return df, False, time.strftime("%H:%M:%S")
+        return obj.get_option_chain(tradingsymbol=symbol, exchange="NFO", expirydate=expiry)["data"]
     except Exception as e:
-        print(f"Option chain fetch failed: {e}")
-        return pd.DataFrame(), True, time.strftime("%H:%M:%S")
+        print("Option chain error:", e)
+        return []
 
-def place_order(symbol="BANKNIFTY", qty=1, price=None, order_type="MARKET", product_type="INTRADAY"):
-    obj = get_connection()
+def place_order(obj, symbol, strike, option_type, qty=50, side="BUY"):
     try:
         order = obj.placeOrder(
             variety="NORMAL",
-            tradingsymbol=symbol,
-            symboltoken="26009",
-            transactiontype="BUY",
-            exchange="NSE",
-            ordertype=order_type,
-            producttype=product_type,
+            tradingsymbol=f"{symbol}{strike}{option_type}",
+            symboltoken="99926000",
+            transactiontype=side,
+            exchange="NFO",
+            ordertype="MARKET",
+            producttype="INTRADAY",
             duration="DAY",
-            price=price if price else 0,
-            squareoff=0,
-            stoploss=0,
             quantity=qty
         )
         return order
     except Exception as e:
-        print("Order failed:", e)
+        print("Order error:", e)
         return None
