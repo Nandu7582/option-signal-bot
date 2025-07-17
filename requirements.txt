@@ -1,10 +1,9 @@
 streamlit
-nsepython
-ta
-matplotlib
-requests
+smartapi-python
+pyotp
+websocket-client
+python-dotenv
 pandas
-numpy
-python-telegram-bot
+requests
 yfinance
 prophet               
