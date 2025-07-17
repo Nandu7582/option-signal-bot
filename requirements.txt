@@ -4,7 +4,11 @@ pyotp
 websocket-client
 python-dotenv
 pandas
+numpy
 requests
 yfinance
-prophet               
+prophet
 ta
+matplotlib
+plotly
+scikit-learn
