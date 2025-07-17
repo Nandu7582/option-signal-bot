@@ -1,134 +1,80 @@
 import streamlit as st
-import time
-from app.assets.nse_index import fetch_index_options
-from app.assets.nse_stocks import fetch_stock_data
-from app.assets.crypto import fetch_bitcoin_data
-from app.assets.commodities import fetch_gold_data
-from app.indicators import add_indicators
-from app.signal_engine import generate_signal
-from app.dashboard import show_dashboard
+from app.broker_api import fetch_option_chain, fetch_ltp, place_order
+from app.signal_engine import generate_option_signals, suggest_hedge
+from app.visualizer import plot_payoff, strategy_summary
+from app.backtester import simulate_bull_call, simulate_iron_condor, simulate_straddle, calculate_metrics
 from app.telegram_alerts import send_telegram_message
-from app.pl_plotter import plot_pl
-from app.broker_api import fetch_ltp, place_order  # 🆕 Angel One integration
+from app.storage import save_signal
+from app.forecasting.prophet_model import forecast_with_prophet
+from app.forecasting.lstm_model import forecast_with_lstm
+import yfinance as yf
+import plotly.express as px
 
-# 🔧 Streamlit Setup
-st.set_page_config(page_title="Option Signal Bot", layout="wide")
-st.title("📊 Option Signal Bot")
-st.markdown("Real-time multi-asset signals with fallback protection.")
+st.set_page_config(page_title="Signal Bot", layout="centered")
+st.title("📊 Multi-Asset Option Signal Bot")
 
-# 🔁 Auto-refresh every 5 minutes
-st.markdown("<meta http-equiv='refresh' content='300'>", unsafe_allow_html=True)
+strategy = st.sidebar.selectbox("Choose Strategy", ["Bull Call Spread", "Iron Condor", "Straddle"])
+symbol = st.sidebar.selectbox("Choose Index", ["BANKNIFTY", "NIFTY"])
+auto_order = st.sidebar.checkbox("Auto-place order for high-confidence signals")
 
-# 🧠 Strategy Selector
-st.sidebar.header("🧠 Strategy Selector")
-strategy = st.sidebar.selectbox("Choose Strategy", ["Bull Call Spread", "Iron Condor", "Straddle", "Custom"])
-st.sidebar.markdown(f"Selected Strategy: **{strategy}**")
+df_chain, fallback, ts = fetch_option_chain(symbol)
+spot = fetch_ltp(symbol)
 
-signals = []
-signal_health = {}
+if not df_chain.empty:
+    expiry_list = sorted(df_chain['expiryDate'].unique())
+    expiry = st.sidebar.selectbox("Choose Expiry", expiry_list)
+    df_chain = df_chain[df_chain['expiryDate'] == expiry]
 
-# 🏦 BANKNIFTY Live Price via Angel One
-try:
-    banknifty_price = fetch_ltp("BANKNIFTY", exchange="NSE", token="26009")
-    st.sidebar.metric("BANKNIFTY (Angel One)", banknifty_price)
-except Exception as e:
-    st.sidebar.error(f"Angel One LTP error: {e}")
+    st.subheader(f"📈 {symbol} Option Chain")
+    st.markdown(f"Timestamp: `{ts}`")
+    st.dataframe(df_chain)
 
-# 🏦 Bank Nifty Signal
-try:
-    df_bn, fallback_bn, ts_bn = fetch_index_options("BANKNIFTY")
-    signal_health["BANKNIFTY"] = f"{'Fallback' if fallback_bn else 'Live'} (Updated: {ts_bn})"
-    if not df_bn.empty:
-        df_bn = add_indicators(df_bn)
-        signals += generate_signal("BANKNIFTY", df_bn, expiry="18JUL2024", strategy=strategy)
-    else:
-        st.warning("⚠️ Bank Nifty data unavailable. Skipping signal.")
-except Exception as e:
-    st.error(f"Bank Nifty fetch failed: {e}")
-    signal_health["BANKNIFTY"] = "Error"
+    signals = generate_option_signals(df_chain, strategy)
+    for sig in signals:
+        st.markdown(f"### 🧠 Signal: {sig['type']} for {sig['symbol']}")
+        st.write(f"Confidence: `{sig['confidence']}`")
+        st.caption(sig['logic'])
 
-# 🏦 Nifty
-try:
-    df_nf, fallback_nf, ts_nf = fetch_index_options("NIFTY")
-    signal_health["NIFTY"] = f"{'Fallback' if fallback_nf else 'Live'} (Updated: {ts_nf})"
-    if not df_nf.empty:
-        df_nf = add_indicators(df_nf)
-        signals += generate_signal("NIFTY", df_nf, expiry="18JUL2024", strategy=strategy)
-    else:
-        st.warning("⚠️ Nifty data unavailable. Skipping signal.")
-except Exception as e:
-    st.error(f"Nifty fetch failed: {e}")
-    signal_health["NIFTY"] = "Error"
+        fig = plot_payoff(strategy, spot, [sig.get(k) for k in ['buy_strike', 'sell_strike', 'strike', 'sell_pe', 'buy_pe', 'sell_ce', 'buy_ce']])
+        st.plotly_chart(fig, use_container_width=True)
 
-# 📈 Nifty 500 Stocks
-for stock in ["RELIANCE", "TCS", "INFY"]:
-    try:
-        df_stock, fallback_stock, ts_stock = fetch_stock_data(stock)
-        signal_health[stock] = f"{'Fallback' if fallback_stock else 'Live'} (Updated: {ts_stock})"
-        if not df_stock.empty:
-            df_stock = add_indicators(df_stock)
-            signals += generate_signal("STOCK", df_stock, strategy=strategy)
-        else:
-            st.warning(f"⚠️ {stock} data unavailable.")
-    except Exception as e:
-        st.error(f"{stock} fetch failed: {e}")
-        signal_health[stock] = "Error"
+        summary = strategy_summary(strategy, [sig.get(k) for k in ['buy_strike', 'sell_strike', 'strike', 'sell_pe', 'buy_pe', 'sell_ce', 'buy_ce']])
+        st.markdown("📊 **Strategy Summary**")
+        st.table(summary)
 
-# 🪙 Bitcoin
-try:
-    btc_price, fallback_btc, ts_btc = fetch_bitcoin_data()
-    signal_health["BITCOIN"] = f"{'Fallback' if fallback_btc else 'Live'} (Updated: {ts_btc})"
-    if btc_price:
-        signals.append({
-            "asset": "BITCOIN",
-            "symbol": "BTC-INR",
-            "price": btc_price,
-            "target": round(btc_price * 1.1),
-            "stop_loss": round(btc_price * 0.95),
-            "logic": f"Price Momentum + RSI ({strategy})"
-        })
-    else:
-        st.warning("⚠️ Bitcoin data unavailable.")
-except Exception as e:
-    st.error(f"Bitcoin fetch failed: {e}")
-    signal_health["BITCOIN"] = "Error"
+        hedge = suggest_hedge(sig)
+        if hedge:
+            st.markdown("🛡️ **Hedge Suggestion**")
+            for k, v in hedge.items():
+                st.write(f"{k}: {v}")
 
-# 🪙 Gold
-try:
-    gold_price, fallback_gold, ts_gold = fetch_gold_data()
-    signal_health["GOLD"] = f"{'Fallback' if fallback_gold else 'Live'} (Updated: {ts_gold})"
-    if gold_price:
-        signals.append({
-            "asset": "GOLD",
-            "symbol": "XAU-INR",
-            "price": gold_price,
-            "target": round(gold_price * 1.1),
-            "stop_loss": round(gold_price * 0.95),
-            "logic": f"Commodity Trend + RSI ({strategy})"
-        })
-    else:
-        st.warning("⚠️ Gold data unavailable.")
-except Exception as e:
-    st.error(f"Gold fetch failed: {e}")
-    signal_health["GOLD"] = "Error"
+        if sig['confidence'] >= 3:
+            send_telegram_message(sig)
+            save_signal(sig)
 
-# 📊 Signal Health Section
-st.subheader("📊 Signal Health Status")
-for asset, status in signal_health.items():
-    color = "🟢" if "Live" in status else "🟡" if "Fallback" in status else "🔴"
-    st.markdown(f"{color} **{asset}**: {status}", unsafe_allow_html=True)
+        if auto_order and sig['confidence'] >= 4:
+            place_order(symbol=sig['symbol'], qty=1)
+            st.success(f"✅ Auto-order placed for {sig['symbol']}")
 
-# 📬 Alerts + Dashboard
-for signal in signals:
-    try:
-        plot_pl(signal['price'], 30, signal.get('strike', signal['price']), signal.get('strike', signal['price']) + 300)
-        send_telegram_message(signal)
-    except Exception as e:
-        st.error(f"Signal error for {signal['symbol']}: {e}")
+        # Forecasting
+        df = yf.download(f"{symbol}.NS", period="6mo", interval="1d")
+        prophet_forecast = forecast_with_prophet(df)
+        lstm_forecast = forecast_with_lstm(df)
+        st.write("📊 Prophet Forecast:", prophet_forecast['yhat'].values[-1])
+        st.write("🧠 LSTM Forecast:", round(lstm_forecast, 2))
 
-show_dashboard(signals)
+        # Backtest
+        st.subheader("📈 Strategy Backtest")
+        if strategy == "Bull Call Spread":
+            bt_df = simulate_bull_call(df_chain, sig['buy_strike'], sig['sell_strike'])
+        elif strategy == "Iron Condor":
+            bt_df = simulate_iron_condor(df_chain, sig['sell_pe'], sig['buy_pe'], sig['sell_ce'], sig['buy_ce'])
+        elif strategy == "Straddle":
+            bt_df = simulate_straddle(df_chain, sig['strike'])
 
-# 🧪 Test Order Button
-if st.sidebar.button("Place Test Order"):
-    result = place_order("BANKNIFTY", qty=1)
-    st.sidebar.write(result)
+        fig_bt = px.line(bt_df, x='spot', y='payoff', title=f"{strategy} Backtest Payoff")
+        st.plotly_chart(fig_bt, use_container_width=True)
+
+        metrics = calculate_metrics(bt_df)
+        st.markdown("📊 **Performance Metrics**")
+        st.table(metrics)
