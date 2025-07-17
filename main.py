@@ -1,18 +1,10 @@
 import os
-import sys
-import subprocess
 import streamlit as st
-
-# 🔧 Force install smartapi-python at runtime
-try:
-    from smartapi.smartConnect import SmartConnect
-except ModuleNotFoundError:
-    st.warning("📦 Installing smartapi-python...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "smartapi-python"])
-    from smartapi.smartConnect import SmartConnect
-
-# ✅ Load environment variables
 from dotenv import load_dotenv
+import pyotp
+from app.smartapi_client import SmartConnect  # ✅ Local wrapper
+
+# 🔧 Load environment variables
 load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
@@ -22,7 +14,6 @@ TOTP_SECRET = os.getenv("TOTP_SECRET")
 
 # 🔐 Authenticate with SmartAPI
 def get_token():
-    import pyotp
     totp = pyotp.TOTP(TOTP_SECRET)
     otp = totp.now()
 
@@ -36,7 +27,7 @@ def get_token():
 # 📊 Streamlit UI
 st.set_page_config(page_title="Option Signal Bot", layout="centered")
 st.title("📊 Option Signal Bot")
-st.success("✅ SmartAPI module loaded successfully!")
+st.write("Welcome to your deployed trading dashboard!")
 
 if st.button("🔐 Connect to SmartAPI"):
     obj = get_token()
