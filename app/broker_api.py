@@ -1,6 +1,6 @@
 import os
 import pyotp
-from smartapi.smartConnect import SmartConnect  # ✅ Corrected import
+from smartapi.smartConnect import SmartConnect
 from dotenv import load_dotenv
 
 load_dotenv()
