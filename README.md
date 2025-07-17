@@ -1,24 +1,23 @@
-# 📊 Option Signal Bot – Multi-Asset Trading Dashboard
+# 📊 Multi-Asset Option Signal Bot
 
-This project is a real-time signal engine for options and assets like Nifty, Bank Nifty, Nifty 500 stocks, Bitcoin, and Gold. It uses technical indicators and hedging strategies to generate high-confidence trading signals.
+An advanced, AI-powered trading dashboard built with Streamlit and Angel One SmartAPI. It generates high-confidence signals for NIFTY, BANKNIFTY, Nifty 500 stocks, Forex, Bitcoin, and Gold using technical, fundamental, and option chain analysis.
 
 ---
 
 ## 🚀 Features
 
-- ✅ Signal generation using MACD, RSI, Bollinger Bands, VWAP
-- 📈 Max Profit/Loss graph for each strategy
-- 🧠 Hedge suggestions for options
-- 📬 Telegram alerts for real-time signals
-- 📱 Mobile-friendly Streamlit dashboard
-- 🏦 Multi-asset support: Index, Stocks, Crypto, Commodities
+- ✅ Angel One SmartAPI integration (LTP, option chain, order placement)
+- 📈 Technical indicators: RSI, MACD, Bollinger Bands, VWAP
+- 📊 Fundamental filters: PE ratio, EPS, volume
+- 🧠 AI forecasting: Prophet + LSTM
+- 🧪 Strategy builder: Bull Call Spread, Iron Condor, Straddle
+- 📬 Telegram alerts for high-confidence signals
+- 🛡️ Hedge suggestions with strike logic
+- 📈 Payoff charts + strategy summaries
+- 📊 Backtesting with performance metrics
+- 📂 Signal archive for analytics
+- 📱 Mobile-optimized layout
 
 ---
 
-## 📦 Installation
-
-```bash
-git clone https://github.com/yourusername/option-signal-bot.git
-cd option-signal-bot
-pip install -r requirements.txt
-streamlit run main.py
+## 🧱 Folder Structure
