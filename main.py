@@ -1,37 +1,55 @@
+import dash
+from dash import html, dcc
+import pandas as pd
+import plotly.graph_objs as go
+from app import signal_engine
+from app.forecasting import prophet_model
 import os
-import streamlit as st
-from dotenv import load_dotenv
-import pyotp
-from app.smartapi_client import SmartConnect  # ✅ Local wrapper
 
-# 🔧 Load environment variables
-load_dotenv()
+app = dash.Dash(__name__)
+app.title = "Option Signal Dashboard"
 
-API_KEY = os.getenv("API_KEY")
-CLIENT_CODE = os.getenv("CLIENT_CODE")
-PASSWORD = os.getenv("PASSWORD")
-TOTP_SECRET = os.getenv("TOTP_SECRET")
+# Load signals
+signals = signal_engine.generate_signals()
 
-# 🔐 Authenticate with SmartAPI
-def get_token():
-    totp = pyotp.TOTP(TOTP_SECRET)
-    otp = totp.now()
+# Forecasts
+prophet_forecast = prophet_model.run_forecast()
 
-    obj = SmartConnect(api_key=API_KEY)
-    data = obj.generateSession(CLIENT_CODE, PASSWORD, otp)
-    if data.get("status") != True:
-        st.error("❌ Login failed")
-        return None
-    return obj
+def signal_table(df):
+    return html.Table([
+        html.Tr([html.Th(col) for col in df.columns])] +
+        [html.Tr([html.Td(df.iloc[i][col]) for col in df.columns])
+         for i in range(len(df))]
+    )
 
-# 📊 Streamlit UI
-st.set_page_config(page_title="Option Signal Bot", layout="centered")
-st.title("📊 Option Signal Bot")
-st.write("Welcome to your deployed trading dashboard!")
+def forecast_chart(df, title):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df['ds'], y=df['yhat'], mode='lines', name='Forecast'))
+    return dcc.Graph(figure=fig, style={"height": "300px"})
 
-if st.button("🔐 Connect to SmartAPI"):
-    obj = get_token()
-    if obj:
-        st.success("✅ Logged in successfully")
-    else:
-        st.error("❌ Login failed")
+app.layout = html.Div([
+    html.H1("📊 Option Signal Dashboard"),
+    dcc.Tabs([
+        dcc.Tab(label="Stocks", children=[
+            html.H3("Signals"),
+            signal_table(signals['stocks']),
+            html.H3("Forecast"),
+            forecast_chart(prophet_forecast['stocks'], "Stocks Forecast"),
+        ]),
+        dcc.Tab(label="Index", children=[
+            signal_table(signals['index']),
+            forecast_chart(prophet_forecast['index'], "Index Forecast"),
+        ]),
+        dcc.Tab(label="Crypto", children=[
+            signal_table(signals['crypto']),
+            forecast_chart(prophet_forecast['crypto'], "Crypto Forecast"),
+        ]),
+        dcc.Tab(label="Commodities", children=[
+            signal_table(signals['commodities']),
+            forecast_chart(prophet_forecast['commodities'], "Commodities Forecast"),
+        ]),
+    ])
+])
+
+if __name__ == "__main__":
+    app.run_server(debug=True, host="0.0.0.0", port=3000)
