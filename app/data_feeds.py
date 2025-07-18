@@ -1,33 +1,11 @@
-def fetch_option_chain(symbol):
-    # Use Angel One SmartAPI or NSE API to fetch live option chain
-    # Return a DataFrame with required columns
-    pass
 import pandas as pd
-import json
 
-def load_fallback_option_chain():
-    try:
-        with open("static/fallback_option_chain.json", "r") as f:
-            data = json.load(f)
-            return pd.DataFrame(data)
-    except Exception as e:
-        print(f"❌ Failed to load fallback option chain: {e}")
-        return pd.DataFrame()
-
-def load_fallback_stock_data():
-    try:
-        with open("static/fallback_stock_data.json", "r") as f:
-            data = json.load(f)
-            return pd.DataFrame(data)
-    except Exception as e:
-        print(f"❌ Failed to load fallback stock data: {e}")
-        return pd.DataFrame()
-
-def load_fallback_forecast():
-    try:
-        with open("static/fallback_forecast.json", "r") as f:
-            data = json.load(f)
-            return pd.DataFrame(data)
-    except Exception as e:
-        print(f"❌ Failed to load fallback forecast: {e}")
-        return pd.DataFrame()
+def fetch_option_chain(symbol):
+    return pd.DataFrame({
+        "symbol": [symbol] * 6,
+        "optionType": ["CE", "CE", "PE", "PE", "CE", "PE"],
+        "strikePrice": [49000, 49300, 49000, 48700, 49500, 48500],
+        "openInterest": [120000, 95000, 110000, 130000, 80000, 125000],
+        "impliedVolatility": [22, 18, 25, 21, 19, 23],
+        "underlyingValue": [49100] * 6
+    })
