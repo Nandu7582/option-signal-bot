@@ -1,116 +1,142 @@
 import dash
-from dash import html, dcc
+from dash import dcc, html, Input, Output
 import pandas as pd
-import plotly.graph_objs as go
-from app.signal_engine import generate_signals
-from app.forecasting.prophet_model import forecast_with_prophet
-from app.backtester import run_backtest  # Ensure this exists or wrap it
-import os
+from app.data_feeds import fetch_option_chain
+from app.visualizer import plot_payoff, strategy_summary
+from app.telegram_alerts import send_alert
 
-app = dash.Dash(__name__)
-app.title = "Option Signal Dashboard"
+app = dash.Dash(__name__, suppress_callback_exceptions=True, meta_tags=[
+    {"name": "viewport", "content": "width=device-width, initial-scale=1"}
+])
 
-# Load signals
-try:
-    signals = generate_signals()
-except Exception as e:
-    print(f"⚠️ Error loading signals: {e}")
-    signals = {
-        "stocks": pd.DataFrame(),
-        "index": pd.DataFrame(),
-        "crypto": pd.DataFrame(),
-        "commodities": pd.DataFrame()
-    }
-
-# Forecast wrapper
-def run_forecast():
-    forecast_result = {}
-    for key in signals:
-        try:
-            df = signals[key]
-            if not df.empty and "date" in df.columns and "close" in df.columns:
-                forecast_result[key] = forecast_with_prophet(df)
-            else:
-                forecast_result[key] = pd.DataFrame()
-        except Exception as e:
-            print(f"⚠️ Forecast error for {key}: {e}")
-            forecast_result[key] = pd.DataFrame()
-    return forecast_result
-
-# Load forecasts
-prophet_forecast = run_forecast()
-
-# Strategy options
-strategies = ["Bull Call Spread", "Iron Condor", "Straddle", "Custom"]
-
-def signal_table(df):
-    if df.empty:
-        return html.Div("No signals available.")
-    return html.Table([
-        html.Tr([html.Th(col) for col in df.columns])] +
-        [html.Tr([html.Td(df.iloc[i][col]) for col in df.columns])
-         for i in range(len(df))]
-    )
-
-def forecast_chart(df, title):
-    if df.empty or "ds" not in df.columns or "yhat" not in df.columns:
-        return html.Div("No forecast data available.")
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df['ds'], y=df['yhat'], mode='lines', name='Forecast'))
-    fig.update_layout(title=title)
-    return dcc.Graph(figure=fig, style={"height": "300px"})
-
-def tradingview_iframe(symbol):
-    return html.Iframe(
-        src=f"https://s.tradingview.com/embed-widget/symbol-overview/?locale=en&symbol=NSE:{symbol}",
-        style={"width": "100%", "height": "300px", "border": "none"}
-    )
+strategies = ["Bull Call Spread", "Iron Condor", "Straddle", "Covered Call", "Protective Put"]
 
 app.layout = html.Div([
-    html.H1("📊 Option Signal Dashboard"),
-    
-    html.Label("Select Strategy"),
-    dcc.Dropdown(
-        options=[{"label": s, "value": s} for s in strategies],
-        value="Bull Call Spread",
-        id="strategy-selector"
-    ),
+    html.H2("📊 Option Signal Dashboard", style={"textAlign": "center"}),
 
-    dcc.Tabs([
-        dcc.Tab(label="Stocks", children=[
-            html.H3("Signals"),
-            signal_table(signals['stocks']),
-            html.H3("Forecast"),
-            forecast_chart(prophet_forecast['stocks'], "Stocks Forecast"),
-            html.H3("Live Chart"),
-            tradingview_iframe("RELIANCE")
-        ]),
-        dcc.Tab(label="Index", children=[
-            html.H3("Signals"),
-            signal_table(signals['index']),
-            html.H3("Forecast"),
-            forecast_chart(prophet_forecast['index'], "Index Forecast"),
-            html.H3("Live Chart"),
-            tradingview_iframe("BANKNIFTY")
-        ]),
-        dcc.Tab(label="Crypto", children=[
-            html.H3("Signals"),
-            signal_table(signals['crypto']),
-            html.H3("Forecast"),
-            forecast_chart(prophet_forecast['crypto'], "Crypto Forecast")
-        ]),
-        dcc.Tab(label="Commodities", children=[
-            html.H3("Signals"),
-            signal_table(signals['commodities']),
-            html.H3("Forecast"),
-            forecast_chart(prophet_forecast['commodities'], "Commodities Forecast")
-        ]),
-        dcc.Tab(label="Backtest", children=[
-            html.H3("Backtest Results"),
-            html.Pre(run_backtest("Bull Call Spread"))
-        ])
-    ])
+    html.Div([
+        dcc.Dropdown(id="symbol-selector", options=[
+            {"label": s, "value": s} for s in ["BANKNIFTY", "NIFTY", "RELIANCE", "ETHUSDT", "GOLD"]
+        ], value="BANKNIFTY", style={"width": "200px"}),
+
+        dcc.Dropdown(id="expiry-selector", placeholder="Select Expiry", style={"width": "200px"}),
+
+        dcc.Dropdown(id="strategy-selector", options=[
+            {"label": s, "value": s} for s in strategies
+        ], value="Bull Call Spread", style={"width": "200px"}),
+
+        dcc.RangeSlider(id="strike-slider", min=18000, max=50000, step=100,
+                        value=[19000, 19500],
+                        marks={i: str(i) for i in range(18000, 50001, 1000)}),
+
+        dcc.Slider(id="oi-slider", min=0, max=200000, step=10000, value=100000,
+                   marks={i: str(i) for i in range(0, 200001, 50000)},
+                   tooltip={"placement": "bottom"}),
+
+        html.Button("Export to CSV", id="export-btn"),
+        html.Button("Send Telegram Alert", id="alert-btn"),
+        dcc.Download(id="download")
+    ], style={"display": "flex", "flexWrap": "wrap", "gap": "20px"}),
+
+    html.Div(id="signal-table"),
+    html.Div(id="payoff-chart"),
+    html.Div(id="strategy-summary")
 ])
+
+# 🔄 Expiry options
+@app.callback(
+    Output("expiry-selector", "options"),
+    Input("symbol-selector", "value")
+)
+def update_expiry_options(symbol):
+    from app.nse_scraper import fetch_nse_option_chain
+    raw = fetch_nse_option_chain(symbol, raw=True)
+    expiries = raw["records"]["expiryDates"]
+    return [{"label": e, "value": e} for e in expiries]
+
+# 📊 Signal table + chart + summary
+@app.callback(
+    Output("signal-table", "children"),
+    Output("payoff-chart", "figure"),
+    Output("strategy-summary", "children"),
+    Input("expiry-selector", "value"),
+    Input("strike-slider", "value"),
+    Input("oi-slider", "value"),
+    Input("symbol-selector", "value"),
+    Input("strategy-selector", "value")
+)
+def update_signals(expiry, strike_range, oi_threshold, symbol, strategy):
+    df = fetch_option_chain(symbol, expiry)
+    df = df[(df["strikePrice"] >= strike_range[0]) & (df["strikePrice"] <= strike_range[1])]
+    df = df[df["openInterest"] >= oi_threshold]
+
+    # 🧠 Confidence scoring
+    df["confidence"] = (
+        (df["openInterest"] / 100000).clip(0, 1) +
+        (df["impliedVolatility"] > 20).astype(int) +
+        (df["expiry"] == expiry).astype(int)
+    ) * 33
+
+    table = html.Table([
+        html.Tr([html.Th(col) for col in df.columns])
+    ] + [
+        html.Tr([html.Td(row[col]) for col in df.columns]) for _, row in df.iterrows()
+    ])
+
+    if not df.empty:
+        row = df.iloc[0]
+        strikes = [row["strikePrice"], row["strikePrice"] + 300]
+        fig = plot_payoff(strategy, row["underlyingValue"], strikes)
+        summary = strategy_summary(strategy, strikes)
+        summary_ui = html.Ul([html.Li(f"{k}: {v}") for k, v in summary.items()])
+    else:
+        fig = plot_payoff(strategy, 49000, [49000, 49300])
+        summary_ui = html.Div("No signals to summarize.")
+
+    return table, fig, summary_ui
+
+# 📦 Export to CSV
+@app.callback(
+    Output("download", "data"),
+    Input("export-btn", "n_clicks"),
+    Input("expiry-selector", "value"),
+    Input("strike-slider", "value"),
+    Input("oi-slider", "value"),
+    Input("symbol-selector", "value"),
+    prevent_initial_call=True
+)
+def export_csv(n, expiry, strike_range, oi_threshold, symbol):
+    df = fetch_option_chain(symbol, expiry)
+    df = df[(df["strikePrice"] >= strike_range[0]) & (df["strikePrice"] <= strike_range[1])]
+    df = df[df["openInterest"] >= oi_threshold]
+    return dcc.send_data_frame(df.to_csv, "signals.csv")
+
+# 🔔 Telegram alert
+@app.callback(
+    Output("alert-btn", "children"),
+    Input("alert-btn", "n_clicks"),
+    Input("expiry-selector", "value"),
+    Input("strike-slider", "value"),
+    Input("oi-slider", "value"),
+    Input("symbol-selector", "value"),
+    Input("strategy-selector", "value"),
+    prevent_initial_call=True
+)
+def send_telegram_alert(n, expiry, strike_range, oi_threshold, symbol, strategy):
+    df = fetch_option_chain(symbol, expiry)
+    df = df[(df["strikePrice"] >= strike_range[0]) & (df["strikePrice"] <= strike_range[1])]
+    df = df[df["openInterest"] >= oi_threshold]
+    if df.empty:
+        return "No signals to alert"
+    row = df.iloc[0]
+    msg = f"""
+📌 SIGNAL – {symbol} {expiry} Expiry 🟢 BUY {row['strikePrice']} {row['optionType']} @ ₹{row['ltp']}
+🎯 Strategy: {strategy}
+📈 Confidence: {int(row['confidence'])}%
+📊 OI: {row['openInterest']} | IV: {row['impliedVolatility']}
+"""
+    send_alert(msg)
+    return "✅ Alert Sent"
 
 if __name__ == "__main__":
     app.run_server(debug=True, host="0.0.0.0", port=5000)
