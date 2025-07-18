@@ -1,9 +1,7 @@
 import pandas as pd
 from app.telegram_alerts import send_alert
-
 from app.signal_logic import generate_option_signals, suggest_hedge
 
-# Dummy option chain data for testing
 def get_dummy_option_chain():
     return pd.DataFrame({
         "symbol": ["NIFTY"] * 6,
@@ -17,6 +15,7 @@ def get_dummy_option_chain():
 def generate_signals():
     df = get_dummy_option_chain()
 
+    # Initialize signal containers
     signals = {
         "stocks": [],
         "index": [],
@@ -24,23 +23,48 @@ def generate_signals():
         "commodities": []
     }
 
-    for strategy in ["Bull Call Spread", "Iron Condor", "Straddle"]:
-        option_signals = generate_option_signals(df, strategy)
+    strategies = ["Bull Call Spread", "Iron Condor", "Straddle"]
+
+    for strategy in strategies:
+        try:
+            option_signals = generate_option_signals(df, strategy)
+        except Exception as e:
+            print(f"⚠️ Error generating signals for {strategy}: {e}")
+            continue
+
         for sig in option_signals:
-            sig["hedge"] = suggest_hedge(sig)
+            try:
+                hedge = suggest_hedge(sig)
+                sig["hedge"] = hedge
+            except Exception as e:
+                print(f"⚠️ Error suggesting hedge for {sig.get('symbol')}: {e}")
+                sig["hedge"] = {"hedge_type": "None"}
+
             signals["index"].append(sig)
 
             # Trigger Telegram alert for high-confidence signals
-            if sig["confidence"] >= 5:
-                send_alert(f"🔔 {sig['type']} signal for {sig['symbol']}:\nBuy: {sig.get('buy_strike')}\nSell: {sig.get('sell_strike')}\nConfidence: {sig['confidence']}\nHedge: {sig['hedge']['hedge_type']}")
+            if sig.get("confidence", 0) >= 5:
+                try:
+                    send_alert(
+                        f"🔔 {sig.get('type', 'Option')} signal for {sig.get('symbol')}:\n"
+                        f"Buy: {sig.get('buy_strike', 'N/A')}\n"
+                        f"Sell: {sig.get('sell_strike', 'N/A')}\n"
+                        f"Confidence: {sig.get('confidence')}\n"
+                        f"Hedge: {sig['hedge'].get('hedge_type', 'None')}"
+                    )
+                except Exception as e:
+                    print(f"⚠️ Telegram alert failed: {e}")
 
-    # For now, reuse index signals for all tabs
-    signals["stocks"] = signals["index"]
-    signals["crypto"] = signals["index"]
-    signals["commodities"] = signals["index"]
+    # Reuse index signals for other tabs
+    for key in ["stocks", "crypto", "commodities"]:
+        signals[key] = signals["index"].copy()
 
-    # Convert to DataFrames for Dash
+    # Convert lists to DataFrames
     for key in signals:
-        signals[key] = pd.DataFrame(signals[key])
+        try:
+            signals[key] = pd.DataFrame(signals[key])
+        except Exception as e:
+            print(f"⚠️ Error converting {key} signals to DataFrame: {e}")
+            signals[key] = pd.DataFrame()
 
     return signals
