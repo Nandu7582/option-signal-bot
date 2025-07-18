@@ -1,6 +1,12 @@
-.env
 __pycache__/
-.venv/
-*.py[cod]
-.streamlit/
-signals.csv
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+.env
+.DS_Store
+Thumbs.db
+*.log
+.ipynb_checkpoints
+.vscode/
