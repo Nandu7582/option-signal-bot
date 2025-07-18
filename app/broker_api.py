@@ -10,36 +10,65 @@ CLIENT_CODE = os.getenv("CLIENT_CODE")
 PASSWORD = os.getenv("PASSWORD")
 TOTP_SECRET = os.getenv("TOTP_SECRET")
 
-def get_token():
-    totp = pyotp.TOTP(TOTP_SECRET)
-    otp = totp.now()
+# Example token map – replace with live fetch if needed
+SYMBOL_TOKEN_MAP = {
+    "NIFTY": "99926000",
+    "BANKNIFTY": "99926001",
+    "RELIANCE": "50032500"
+}
 
-    obj = SmartConnect(api_key=API_KEY)
-    data = obj.generateSession(CLIENT_CODE, PASSWORD, otp)
-    if data.get("status") != True:
-        raise Exception("Login failed:", data)
-    return obj
+def get_token():
+    try:
+        totp = pyotp.TOTP(TOTP_SECRET)
+        otp = totp.now()
+
+        obj = SmartConnect(api_key=API_KEY)
+        data = obj.generateSession(CLIENT_CODE, PASSWORD, otp)
+
+        if not data.get("status"):
+            raise Exception(f"Login failed: {data}")
+        print("✅ Angel One login successful.")
+        return obj
+    except Exception as e:
+        print(f"❌ Token generation error: {e}")
+        return None
+
+def get_symbol_token(symbol):
+    token = SYMBOL_TOKEN_MAP.get(symbol.upper())
+    if not token:
+        print(f"⚠️ Symbol token not found for: {symbol}")
+    return token
 
 def fetch_ltp(obj, symbol):
+    token = get_symbol_token(symbol)
+    if not token:
+        return None
     try:
-        return obj.get_ltp_data(exchange="NSE", tradingsymbol=symbol, symboltoken="99926000")["data"]["ltp"]
+        response = obj.get_ltp_data(exchange="NSE", tradingsymbol=symbol, symboltoken=token)
+        return response["data"]["ltp"]
     except Exception as e:
-        print("LTP fetch error:", e)
+        print(f"❌ LTP fetch error for {symbol}: {e}")
         return None
 
 def fetch_option_chain(obj, symbol, expiry):
     try:
-        return obj.get_option_chain(tradingsymbol=symbol, exchange="NFO", expirydate=expiry)["data"]
+        response = obj.get_option_chain(tradingsymbol=symbol, exchange="NFO", expirydate=expiry)
+        return response.get("data", [])
     except Exception as e:
-        print("Option chain error:", e)
+        print(f"❌ Option chain fetch error for {symbol}: {e}")
         return []
 
 def place_order(obj, symbol, strike, option_type, qty=50, side="BUY"):
+    token = get_symbol_token(symbol)
+    if not token:
+        return {"status": "error", "message": "Invalid symbol token"}
+
+    tradingsymbol = f"{symbol}{strike}{option_type}"
     try:
         order = obj.placeOrder(
             variety="NORMAL",
-            tradingsymbol=f"{symbol}{strike}{option_type}",
-            symboltoken="99926000",
+            tradingsymbol=tradingsymbol,
+            symboltoken=token,
             transactiontype=side,
             exchange="NFO",
             ordertype="MARKET",
@@ -47,7 +76,8 @@ def place_order(obj, symbol, strike, option_type, qty=50, side="BUY"):
             duration="DAY",
             quantity=qty
         )
+        print(f"✅ Order placed: {tradingsymbol}")
         return order
     except Exception as e:
-        print("Order error:", e)
-        return None
+        print(f"❌ Order error for {tradingsymbol}: {e}")
+        return {"status": "error", "message": str(e)}
