@@ -2,65 +2,91 @@ import pandas as pd
 import os
 import pyotp
 from smartapi import SmartConnect
+from app.nse_scraper import fetch_nse_option_chain
+import requests
 
-def _fetch_index_options(symbol="BANKNIFTY", expiry="2024-07-18", strike_range=500):
-    try:
-        # 🔐 Authenticate
-        obj = SmartConnect(api_key=os.getenv("API_KEY"))
-        totp = pyotp.TOTP(os.getenv("TOTP_SECRET")).now()
-        data = obj.generateSession(os.getenv("CLIENT_CODE"), os.getenv("PASSWORD"), totp)
-        obj.setAccessToken(data["data"]["access_token"])
-        print("✅ SmartAPI login successful")
+def smartapi_login():
+    obj = SmartConnect(api_key=os.getenv("API_KEY"))
+    totp = pyotp.TOTP(os.getenv("TOTP_SECRET")).now()
+    data = obj.generateSession(os.getenv("CLIENT_CODE"), os.getenv("PASSWORD"), totp)
+    obj.setAccessToken(data["data"]["access_token"])
+    return obj
 
-        # 📈 Get spot price (fallback if fails)
-        spot_price = 49100
+def enrich_with_ltp(df, symbol):
+    obj = smartapi_login()
+    enriched = []
+    for _, row in df.iterrows():
         try:
-            spot_data = obj.ltpData(exchange="NSE", tradingsymbol=symbol, symboltoken="999920000")
-            spot_price = float(spot_data["data"]["ltp"])
-            print(f"📈 Spot price for {symbol}: {spot_price}")
+            expiry_fmt = pd.to_datetime(row["expiry"]).strftime("%d%b").upper()
+            tradingsymbol = f"{symbol}{expiry_fmt}{int(row['strikePrice'])}{row['optionType']}"
+            scrip = obj.searchScrip(tradingsymbol)
+            token = scrip["data"][0]["token"]
+            quote = obj.ltpData(exchange="NFO", tradingsymbol=tradingsymbol, symboltoken=token)
+            ltp = float(quote["data"]["ltp"])
+            enriched.append({**row, "tradingsymbol": tradingsymbol, "ltp": ltp})
         except Exception as e:
-            print(f"⚠️ Failed to fetch spot price, using fallback: {e}")
+            print(f"⚠️ Skipped {row['strikePrice']} {row['optionType']}: {e}")
+    return pd.DataFrame(enriched)
 
-        # 🧠 Generate strike range
-        strikes = [int(spot_price + i) for i in range(-strike_range, strike_range + 100, 100)]
-
-        # 📅 Format expiry
-        expiry_fmt = pd.to_datetime(expiry).strftime("%d%b").upper()  # e.g. 18JUL
-
-        # 📊 Fetch option contracts (using dummy LTP for now)
-        contracts = []
-        for strike in strikes:
-            for opt_type in ["CE", "PE"]:
-                tradingsymbol = f"{symbol}{expiry_fmt}{strike}{opt_type}"
-                print(f"🔍 Trying {tradingsymbol}")
-                try:
-                    # Replace with actual SmartAPI call when ready
-                    # quote = obj.ltpData(exchange="NFO", tradingsymbol=tradingsymbol, symboltoken="999920000")
-                    quote = {"data": {"ltp": spot_price + (strike % 100)}}  # Dummy LTP
-                    contracts.append({
-                        "symbol": symbol,
-                        "optionType": opt_type,
-                        "strikePrice": strike,
-                        "openInterest": 100000 + strike % 1000,  # Dummy OI
-                        "impliedVolatility": 20 + (strike % 5),  # Dummy IV
-                        "underlyingValue": spot_price,
-                        "tradingsymbol": tradingsymbol
-                    })
-                    print(f"✅ Added {tradingsymbol}")
-                except Exception as e:
-                    print(f"⚠️ Skipped {tradingsymbol}: {e}")
-
-        df = pd.DataFrame(contracts)
-        print(f"✅ Fetched {len(df)} option contracts")
-        return df
-
+def fetch_crypto_price(symbol="ETHUSDT"):
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        response = requests.get(url).json()
+        return float(response["price"])
     except Exception as e:
-        print(f"❌ SmartAPI error: {e}")
-        return pd.DataFrame()
+        print(f"❌ Crypto price fetch failed: {e}")
+        return 0
+
+def fetch_gold_price():
+    try:
+        url = "https://www.mcxlive.org/gold-rate-india"
+        # You can replace this with a proper API or scrape if needed
+        return 60200  # Placeholder
+    except Exception as e:
+        print(f"❌ Gold price fetch failed: {e}")
+        return 0
 
 def fetch_option_chain(symbol="BANKNIFTY"):
-    if symbol == "BANKNIFTY":
-        return _fetch_index_options(symbol)
-    # Future support for NIFTY, stocks, crypto
-    print(f"⚠️ Unsupported symbol: {symbol}")
-    return pd.DataFrame()
+    try:
+        if symbol in ["BANKNIFTY", "NIFTY", "RELIANCE"]:
+            df = fetch_nse_option_chain(symbol)
+            if df.empty:
+                print("⚠️ NSE data unavailable")
+                return pd.DataFrame()
+            return enrich_with_ltp(df, symbol)
+
+        elif symbol == "ETHUSDT":
+            price = fetch_crypto_price(symbol)
+            return pd.DataFrame({
+                "symbol": [symbol],
+                "optionType": ["CE", "PE"],
+                "strikePrice": [int(price), int(price)],
+                "openInterest": [5000, 4800],
+                "impliedVolatility": [60, 65],
+                "underlyingValue": [price, price],
+                "expiry": ["NA", "NA"],
+                "tradingsymbol": [f"{symbol}CE", f"{symbol}PE"],
+                "ltp": [320, 280]
+            })
+
+        elif symbol == "GOLD":
+            price = fetch_gold_price()
+            return pd.DataFrame({
+                "symbol": ["GOLD"],
+                "optionType": ["CE", "PE"],
+                "strikePrice": [60000, 60000],
+                "openInterest": [10000, 9500],
+                "impliedVolatility": [22, 24],
+                "underlyingValue": [price, price],
+                "expiry": ["NA", "NA"],
+                "tradingsymbol": ["GOLD60000CE", "GOLD60000PE"],
+                "ltp": [180, 160]
+            })
+
+        else:
+            print(f"⚠️ Unsupported symbol: {symbol}")
+            return pd.DataFrame()
+
+    except Exception as e:
+        print(f"❌ fetch_option_chain error: {e}")
+        return pd.DataFrame()
