@@ -12,21 +12,31 @@ def fetch_index_options(symbol="BANKNIFTY", expiry="2024-07-18", strike_range=50
         obj.setAccessToken(data["data"]["access_token"])
         print("✅ SmartAPI login successful")
 
-        # 📦 Get LTP for spot price
-        spot_data = obj.ltpData(exchange="NSE", tradingsymbol=symbol, symboltoken="999920000")
-        spot_price = float(spot_data["data"]["ltp"])
-        print(f"📈 Spot price for {symbol}: {spot_price}")
+        # 📈 Get spot price (dummy fallback)
+        spot_price = 49100
+        try:
+            spot_data = obj.ltpData(exchange="NSE", tradingsymbol=symbol, symboltoken="999920000")
+            spot_price = float(spot_data["data"]["ltp"])
+            print(f"📈 Spot price for {symbol}: {spot_price}")
+        except Exception as e:
+            print(f"⚠️ Failed to fetch spot price, using fallback: {e}")
 
         # 🧠 Generate strike range
         strikes = [int(spot_price + i) for i in range(-strike_range, strike_range + 100, 100)]
 
-        # 📊 Fetch option contracts
+        # 📅 Format expiry
+        expiry_fmt = pd.to_datetime(expiry).strftime("%d%b").upper()  # e.g. 18JUL
+
+        # 📊 Fetch option contracts (using dummy LTP for now)
         contracts = []
         for strike in strikes:
             for opt_type in ["CE", "PE"]:
-                tradingsymbol = f"{symbol}{expiry.replace('-', '')}{strike}{opt_type}"
+                tradingsymbol = f"{symbol}{expiry_fmt}{strike}{opt_type}"
+                print(f"🔍 Trying {tradingsymbol}")
                 try:
-                    quote = obj.ltpData(exchange="NFO", tradingsymbol=tradingsymbol, symboltoken="999920000")
+                    # Replace with actual SmartAPI call when ready
+                    # quote = obj.ltpData(exchange="NFO", tradingsymbol=tradingsymbol, symboltoken="999920000")
+                    quote = {"data": {"ltp": spot_price + (strike % 100)}}  # Dummy LTP
                     contracts.append({
                         "symbol": symbol,
                         "optionType": opt_type,
@@ -36,6 +46,7 @@ def fetch_index_options(symbol="BANKNIFTY", expiry="2024-07-18", strike_range=50
                         "underlyingValue": spot_price,
                         "tradingsymbol": tradingsymbol
                     })
+                    print(f"✅ Added {tradingsymbol}")
                 except Exception as e:
                     print(f"⚠️ Skipped {tradingsymbol}: {e}")
 
