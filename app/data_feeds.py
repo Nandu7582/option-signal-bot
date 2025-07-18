@@ -3,7 +3,7 @@ import os
 import pyotp
 from smartapi import SmartConnect
 
-def fetch_index_options(symbol="BANKNIFTY", expiry="2024-07-18", strike_range=500):
+def _fetch_index_options(symbol="BANKNIFTY", expiry="2024-07-18", strike_range=500):
     try:
         # 🔐 Authenticate
         obj = SmartConnect(api_key=os.getenv("API_KEY"))
@@ -12,7 +12,7 @@ def fetch_index_options(symbol="BANKNIFTY", expiry="2024-07-18", strike_range=50
         obj.setAccessToken(data["data"]["access_token"])
         print("✅ SmartAPI login successful")
 
-        # 📈 Get spot price (dummy fallback)
+        # 📈 Get spot price (fallback if fails)
         spot_price = 49100
         try:
             spot_data = obj.ltpData(exchange="NSE", tradingsymbol=symbol, symboltoken="999920000")
@@ -57,3 +57,10 @@ def fetch_index_options(symbol="BANKNIFTY", expiry="2024-07-18", strike_range=50
     except Exception as e:
         print(f"❌ SmartAPI error: {e}")
         return pd.DataFrame()
+
+def fetch_option_chain(symbol="BANKNIFTY"):
+    if symbol == "BANKNIFTY":
+        return _fetch_index_options(symbol)
+    # Future support for NIFTY, stocks, crypto
+    print(f"⚠️ Unsupported symbol: {symbol}")
+    return pd.DataFrame()
