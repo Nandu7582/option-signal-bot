@@ -1,0 +1,16 @@
+# Environment variables (contains sensitive data)
+.env
+.env.local
+.env.production
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+.env
+.DS_Store
+Thumbs.db
+*.log
+.ipynb_checkpoints
+.vscode/
