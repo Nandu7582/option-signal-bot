@@ -37,9 +37,10 @@ def plot_payoff(strategy, spot, strikes, premiums=None):
 def strategy_summary(strategy, strikes, premiums=None):
     if strategy == "Bull Call Spread":
         buy, sell = strikes
+        buy_premium = premiums[0] if premiums else 100
         max_profit = sell - buy
-        max_loss = premiums[0] if premiums else 100
-        breakeven = buy + max_loss
+        max_loss = buy_premium
+        breakeven = buy + buy_premium
         return {
             "Max Profit": max_profit,
             "Max Loss": -max_loss,
@@ -52,7 +53,7 @@ def strategy_summary(strategy, strikes, premiums=None):
         return {
             "Max Profit": "Unlimited",
             "Max Loss": -premium,
-            "Breakeven": f"{strike ± premium}"
+            "Breakeven": f"{strike - premium} / {strike + premium}"
         }
 
     elif strategy == "Iron Condor":
