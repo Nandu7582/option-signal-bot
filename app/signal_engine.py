@@ -80,5 +80,5 @@ def generate_signals():
             signals[key] = pd.DataFrame(signals[key])
         except Exception as e:
             signals[key] = pd.DataFrame()
-
+    
     return signals
