@@ -30,14 +30,17 @@ def simulate_straddle(df, strike, premium=200):
 
 def calculate_metrics(df):
     profits = df['payoff']
-    win_rate = (profits > 0).mean() * 100
-    avg_return = profits.mean()
-    max_drawdown = profits.max() - profits.min()
-    profit_factor = profits[profits > 0].sum() / abs(profits[profits < 0].sum()) if profits[profits < 0].sum() != 0 else float('inf')
+    win_rate = round((profits > 0).mean() * 100, 2)
+    avg_return = round(profits.mean(), 2)
+    max_drawdown = round(profits.max() - profits.min(), 2)
+
+    total_gain = profits[profits > 0].sum()
+    total_loss = abs(profits[profits < 0].sum())
+    profit_factor = round(total_gain / total_loss, 2) if total_loss != 0 else float('inf')
 
     return {
-        "Win Rate (%)": round(win_rate, 2),
-        "Average Return": round(avg_return, 2),
-        "Max Drawdown": round(max_drawdown, 2),
-        "Profit Factor": round(profit_factor, 2)
+        "Win Rate (%)": win_rate,
+        "Average Return": avg_return,
+        "Max Drawdown": max_drawdown,
+        "Profit Factor": profit_factor
     }
