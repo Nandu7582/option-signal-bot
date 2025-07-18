@@ -1,29 +1,19 @@
-import requests
+import os
+from smartapi import SmartConnect
 import pyotp
 
-class SmartConnect:
-    def __init__(self, api_key):
-        self.api_key = api_key
-        self.feed_token = None
-        self.client_code = None
-        self.jwt_token = None
+API_KEY = os.getenv("API_KEY")
+CLIENT_CODE = os.getenv("CLIENT_CODE")
+PASSWORD = os.getenv("PASSWORD")
+TOTP_SECRET = os.getenv("TOTP_SECRET")
 
-    def generateSession(self, client_code, password, totp):
-        url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword"
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "X-API-KEY": self.api_key
-        }
-        payload = {
-            "clientcode": client_code,
-            "password": password,
-            "totp": totp
-        }
-        response = requests.post(url, json=payload, headers=headers)
-        data = response.json()
-        if data.get("status") == True:
-            self.feed_token = data["data"]["feedToken"]
-            self.client_code = client_code
-            self.jwt_token = data["data"]["jwtToken"]
-        return data
+def create_session():
+    obj = SmartConnect(api_key=API_KEY)
+    totp = pyotp.TOTP(TOTP_SECRET).now()
+    data = obj.generateSession(CLIENT_CODE, PASSWORD, totp)
+    if data['status']:
+        print("✅ SmartAPI login successful")
+        return obj
+    else:
+        print("❌ SmartAPI login failed:", data['message'])
+        return None
