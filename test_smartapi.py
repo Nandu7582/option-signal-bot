@@ -1,6 +1,9 @@
+from dotenv import load_dotenv
 import os
 import pyotp
 from smartapi import SmartConnect
+
+load_dotenv()  # ✅ This loads your .env file
 
 def test_login():
     try:
