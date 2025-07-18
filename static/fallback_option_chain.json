@@ -1,0 +1,18 @@
+[
+  {
+    "symbol": "NIFTY",
+    "optionType": "CE",
+    "strikePrice": 18200,
+    "openInterest": 120000,
+    "impliedVolatility": 22,
+    "underlyingValue": 18350
+  },
+  {
+    "symbol": "NIFTY",
+    "optionType": "PE",
+    "strikePrice": 18200,
+    "openInterest": 110000,
+    "impliedVolatility": 25,
+    "underlyingValue": 18350
+  }
+]
