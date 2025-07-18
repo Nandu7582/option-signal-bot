@@ -3,8 +3,8 @@ from dash import html, dcc
 import pandas as pd
 import plotly.graph_objs as go
 from app.signal_engine import generate_signals
-from app.forecasting.prophet_model import forecast_prices
-from app import telegram_alerts, backtester
+from app.forecasting.prophet_model import forecast_with_prophet
+from app.backtester import run_backtest  # Ensure this exists or wrap it
 import os
 
 app = dash.Dash(__name__)
@@ -29,7 +29,7 @@ def run_forecast():
         try:
             df = signals[key]
             if not df.empty and "date" in df.columns and "close" in df.columns:
-                forecast_result[key] = forecast_prices(df)
+                forecast_result[key] = forecast_with_prophet(df)
             else:
                 forecast_result[key] = pd.DataFrame()
         except Exception as e:
@@ -107,7 +107,7 @@ app.layout = html.Div([
         ]),
         dcc.Tab(label="Backtest", children=[
             html.H3("Backtest Results"),
-            html.Pre(backtester.run_backtest("Bull Call Spread"))
+            html.Pre(run_backtest("Bull Call Spread"))
         ])
     ])
 ])
