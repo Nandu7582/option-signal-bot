@@ -1,1 +1,11 @@
-
+[
+  {
+    "symbol": "RELIANCE",
+    "lastPrice": 2850.25,
+    "dayHigh": 2875.00,
+    "dayLow": 2820.00,
+    "volume": 1200000,
+    "change": 15.25,
+    "pChange": 0.54
+  }
+]
