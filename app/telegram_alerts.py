@@ -10,7 +10,12 @@ def send_alert(message):
         return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
-    try:
-        requests.post(url, json=payload)
-    except Exception as e:
-        print(f"❌ Telegram alert failed: {e}")
+    requests.post(url, json=payload)
+
+def send_chart(path):
+    if not BOT_TOKEN or not CHAT_ID:
+        print("⚠️ Telegram credentials missing.")
+        return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+    with open(path, "rb") as photo:
+        requests.post(url, data={"chat_id": CHAT_ID}, files={"photo": photo})
