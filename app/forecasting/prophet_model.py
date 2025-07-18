@@ -2,24 +2,33 @@ from prophet import Prophet
 import pandas as pd
 
 def forecast_with_prophet(df, periods=5):
-    if df.empty or "date" not in df.columns or "close" not in df.columns:
+    # Validate input
+    if df.empty:
+        print("⚠️ Input DataFrame is empty. Skipping forecast.")
         return pd.DataFrame()
 
-    model_df = df.rename(columns={"date": "ds", "close": "y"})
-    model = Prophet()
-    model.fit(model_df)
+    # Try to locate a valid date column
+    date_col = None
+    for col in df.columns:
+        if "date" in col.lower():
+            date_col = col
+            break
 
-    future = model.make_future_dataframe(periods=periods)
-    forecast = model.predict(future)
+    if not date_col or "close" not in df.columns:
+        print(f"❌ Missing required columns. Found columns: {df.columns.tolist()}")
+        return pd.DataFrame()
 
-    return forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+    try:
+        model_df = df[[date_col, "close"]].rename(columns={date_col: "ds", "close": "y"})
+        model_df["ds"] = pd.to_datetime(model_df["ds"])
 
-def run_forecast(signals_dict):
-    forecast_result = {}
-    for key, df in signals_dict.items():
-        try:
-            forecast_result[key] = forecast_with_prophet(df)
-        except Exception as e:
-            print(f"⚠️ Forecast error for {key}: {e}")
-            forecast_result[key] = pd.DataFrame()
-    return forecast_result
+        model = Prophet()
+        model.fit(model_df)
+
+        future = model.make_future_dataframe(periods=periods)
+        forecast = model.predict(future)
+
+        return forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+    except Exception as e:
+        print(f"❌ Forecasting error: {e}")
+        return pd.DataFrame()
