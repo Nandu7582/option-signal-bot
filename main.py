@@ -2,21 +2,50 @@ import dash
 from dash import html, dcc
 import pandas as pd
 import plotly.graph_objs as go
-from app import signal_engine, telegram_alerts, backtester
-from app.forecasting import prophet_model
+from app.signal_engine import generate_signals
+from app.forecasting.prophet_model import forecast_prices
+from app import telegram_alerts, backtester
 import os
 
 app = dash.Dash(__name__)
 app.title = "Option Signal Dashboard"
 
-# Load signals and forecasts
-signals = signal_engine.generate_signals()
-prophet_forecast = prophet_model.run_forecast()
+# Load signals
+try:
+    signals = generate_signals()
+except Exception as e:
+    print(f"⚠️ Error loading signals: {e}")
+    signals = {
+        "stocks": pd.DataFrame(),
+        "index": pd.DataFrame(),
+        "crypto": pd.DataFrame(),
+        "commodities": pd.DataFrame()
+    }
+
+# Forecast wrapper
+def run_forecast():
+    forecast_result = {}
+    for key in signals:
+        try:
+            df = signals[key]
+            if not df.empty and "date" in df.columns and "close" in df.columns:
+                forecast_result[key] = forecast_prices(df)
+            else:
+                forecast_result[key] = pd.DataFrame()
+        except Exception as e:
+            print(f"⚠️ Forecast error for {key}: {e}")
+            forecast_result[key] = pd.DataFrame()
+    return forecast_result
+
+# Load forecasts
+prophet_forecast = run_forecast()
 
 # Strategy options
 strategies = ["Bull Call Spread", "Iron Condor", "Straddle", "Custom"]
 
 def signal_table(df):
+    if df.empty:
+        return html.Div("No signals available.")
     return html.Table([
         html.Tr([html.Th(col) for col in df.columns])] +
         [html.Tr([html.Td(df.iloc[i][col]) for col in df.columns])
@@ -24,6 +53,8 @@ def signal_table(df):
     )
 
 def forecast_chart(df, title):
+    if df.empty or "ds" not in df.columns or "yhat" not in df.columns:
+        return html.Div("No forecast data available.")
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['ds'], y=df['yhat'], mode='lines', name='Forecast'))
     fig.update_layout(title=title)
@@ -55,16 +86,23 @@ app.layout = html.Div([
             tradingview_iframe("RELIANCE")
         ]),
         dcc.Tab(label="Index", children=[
+            html.H3("Signals"),
             signal_table(signals['index']),
+            html.H3("Forecast"),
             forecast_chart(prophet_forecast['index'], "Index Forecast"),
+            html.H3("Live Chart"),
             tradingview_iframe("BANKNIFTY")
         ]),
         dcc.Tab(label="Crypto", children=[
+            html.H3("Signals"),
             signal_table(signals['crypto']),
+            html.H3("Forecast"),
             forecast_chart(prophet_forecast['crypto'], "Crypto Forecast")
         ]),
         dcc.Tab(label="Commodities", children=[
+            html.H3("Signals"),
             signal_table(signals['commodities']),
+            html.H3("Forecast"),
             forecast_chart(prophet_forecast['commodities'], "Commodities Forecast")
         ]),
         dcc.Tab(label="Backtest", children=[
