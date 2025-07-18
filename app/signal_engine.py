@@ -1,80 +1,46 @@
-def generate_option_signals(df, strategy="Bull Call Spread"):
-    signals = []
-    df = df[df['optionType'].isin(['CE', 'PE'])].copy()
+import pandas as pd
+from app.telegram_alerts import send_alert
 
-    spot_price = df['underlyingValue'].iloc[0]
-    df['distance'] = abs(df['strikePrice'] - spot_price)
+from app.signal_logic import generate_option_signals, suggest_hedge
 
-    def score(row):
-        score = 0
-        if row['openInterest'] > 100000: score += 1
-        if row['impliedVolatility'] > 20: score += 1
-        if abs(row['strikePrice'] - spot_price) < 100: score += 1
-        return score
+# Dummy option chain data for testing
+def get_dummy_option_chain():
+    return pd.DataFrame({
+        "symbol": ["NIFTY"] * 6,
+        "optionType": ["CE", "CE", "PE", "PE", "CE", "PE"],
+        "strikePrice": [18200, 18400, 18200, 18000, 18600, 17800],
+        "openInterest": [120000, 95000, 110000, 130000, 80000, 125000],
+        "impliedVolatility": [22, 18, 25, 21, 19, 23],
+        "underlyingValue": [18350] * 6
+    })
 
-    df['confidence'] = df.apply(score, axis=1)
+def generate_signals():
+    df = get_dummy_option_chain()
 
-    if strategy == "Bull Call Spread":
-        ce_df = df[df['optionType'] == 'CE'].sort_values(['distance', 'confidence'], ascending=[True, False])
-        if not ce_df.empty:
-            atm = ce_df.iloc[0]
-            otm = ce_df[ce_df['strikePrice'] > atm['strikePrice']].sort_values('confidence', ascending=False).head(1)
-            if not otm.empty:
-                signals.append({
-                    "symbol": df['symbol'].iloc[0],
-                    "type": "Bull Call Spread",
-                    "buy_strike": atm['strikePrice'],
-                    "sell_strike": otm.iloc[0]['strikePrice'],
-                    "confidence": atm['confidence'] + otm.iloc[0]['confidence'],
-                    "logic": "ATM CE + OTM CE with high OI/IV"
-                })
+    signals = {
+        "stocks": [],
+        "index": [],
+        "crypto": [],
+        "commodities": []
+    }
 
-    elif strategy == "Iron Condor":
-        ce_df = df[df['optionType'] == 'CE'].sort_values('strikePrice')
-        pe_df = df[df['optionType'] == 'PE'].sort_values('strikePrice', ascending=False)
-        if not ce_df.empty and not pe_df.empty:
-            signals.append({
-                "symbol": df['symbol'].iloc[0],
-                "type": "Iron Condor",
-                "sell_ce": ce_df.iloc[-2]['strikePrice'],
-                "buy_ce": ce_df.iloc[-1]['strikePrice'],
-                "sell_pe": pe_df.iloc[-2]['strikePrice'],
-                "buy_pe": pe_df.iloc[-1]['strikePrice'],
-                "confidence": ce_df.iloc[-2]['confidence'] + pe_df.iloc[-2]['confidence'],
-                "logic": "Volatility range + OI filter"
-            })
+    for strategy in ["Bull Call Spread", "Iron Condor", "Straddle"]:
+        option_signals = generate_option_signals(df, strategy)
+        for sig in option_signals:
+            sig["hedge"] = suggest_hedge(sig)
+            signals["index"].append(sig)
 
-    elif strategy == "Straddle":
-        atm_df = df.sort_values('distance').head(1)
-        if not atm_df.empty:
-            strike = atm_df.iloc[0]['strikePrice']
-            signals.append({
-                "symbol": df['symbol'].iloc[0],
-                "type": "Straddle",
-                "strike": strike,
-                "confidence": atm_df.iloc[0]['confidence'],
-                "logic": "ATM CE + PE with high OI"
-            })
+            # Trigger Telegram alert for high-confidence signals
+            if sig["confidence"] >= 5:
+                send_alert(f"🔔 {sig['type']} signal for {sig['symbol']}:\nBuy: {sig.get('buy_strike')}\nSell: {sig.get('sell_strike')}\nConfidence: {sig['confidence']}\nHedge: {sig['hedge']['hedge_type']}")
+
+    # For now, reuse index signals for all tabs
+    signals["stocks"] = signals["index"]
+    signals["crypto"] = signals["index"]
+    signals["commodities"] = signals["index"]
+
+    # Convert to DataFrames for Dash
+    for key in signals:
+        signals[key] = pd.DataFrame(signals[key])
 
     return signals
-
-def suggest_hedge(signal):
-    if signal['type'] == "Bull Call Spread":
-        return {
-            "hedge_type": "Put Buy",
-            "strike": signal['buy_strike'] - 200,
-            "logic": "Protect downside below long CE strike"
-        }
-    elif signal['type'] == "Iron Condor":
-        return {
-            "hedge_type": "Calendar Spread",
-            "logic": "Use different expiry to hedge range risk"
-        }
-    elif signal['type'] == "Straddle":
-        return {
-            "hedge_type": "Strangle",
-            "strike_low": signal['strike'] - 100,
-            "strike_high": signal['strike'] + 100,
-            "logic": "Reduce premium cost by widening strikes"
-        }
-    return {}
