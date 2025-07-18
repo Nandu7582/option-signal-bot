@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+import sys
+print("Python path:", sys.path)
+
+try:
+    import numpy as np
+    print("✅ NumPy imported successfully, version:", np.__version__)
+except Exception as e:
+    print("❌ NumPy import failed:", e)
+
+try:
+    import pandas as pd
+    print("✅ Pandas imported successfully, version:", pd.__version__)
+except Exception as e:
+    print("❌ Pandas import failed:", e)
+
+try:
+    import dash
+    print("✅ Dash imported successfully, version:", dash.__version__)
+except Exception as e:
+    print("❌ Dash import failed:", e)
+
+print("All imports tested!")
